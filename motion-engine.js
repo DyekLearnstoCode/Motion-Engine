@@ -13,19 +13,19 @@ const MotionEngine = {
 
     canvasID: "heroCanvas",
 
-    frameCount: 151,
+    frameCount: 241,
 
-    imagePath: "https://dyeklearnstocode.github.io/Img-Scrub/images/download_",
+    imagePath:"https://dyeklearnstocode.github.io/Motion-Engine/frames/frame_",
 
     extension: ".jpg",
 
-    scrollLength: 9000,
+    scrollLength: 14000,
 
     scrub: 0.35,
 
     pin: true,
 
-    preloadFirst: 5,
+    preloadFirst: 20,
 
     loader: true,
 
@@ -44,7 +44,7 @@ const MotionEngine = {
 
   ctx: null,
 
-  images: [],
+  images: new Array(),
 
   currentFrame: 0,
 
@@ -64,6 +64,7 @@ const MotionEngine = {
     if (this.initialized) return;
 
     this.waitForHero();
+    this.images.length = this.config.frameCount;
   },
 
   /*=========================================
@@ -217,40 +218,96 @@ const MotionEngine = {
       LOAD IMAGES
     =========================================*/
 
-  loadImages() {
+  /*=========================================
+  LOAD IMAGES
+=========================================*/
+
+loadImages() {
+
+    const preloadTarget = this.config.preloadFirst;
+
     for (let i = 0; i < this.config.frameCount; i++) {
-      const image = new Image();
 
-      image.onload = () => {
-        this.images[i] = image;
+        const image = new Image();
 
-        this.loadedFrames++;
+        image.decoding = "async";
 
-        if (i === 0) {
-          this.renderFrame(0);
-        }
+        image.onload = () => {
 
-        if (this.loadedFrames === this.config.frameCount) {
-          this.startScroll();
-        }
-      };
+            this.images[i] = image;
 
-      if (this.loadedFrames === this.config.frameCount) {
-        this.log("All Frames Loaded");
+            this.loadedFrames++;
 
-        this.startScroll();
-      }
+            // Draw the very first frame immediately
+            if (i === 0) {
+
+                this.renderFrame(0);
+
+            }
+
+            // Enable scrolling after preload target
+            if (
+
+                this.loadedFrames === preloadTarget
+
+            ) {
+
+                this.startScroll();
+
+            }
+
+            // Everything loaded
+            if (
+
+                this.loadedFrames === this.config.frameCount
+
+            ) {
+
+                this.log("All Frames Loaded");
+
+            }
+
+        };
+
+        image.onerror = () => {
+
+            console.warn(
+
+                "Frame failed:",
+
+                i + 1
+
+            );
+
+        };
+
+        image.src =
+
+            this.config.imagePath +
+
+            String(i + 1)
+
+                .padStart(6, "0") +
+
+            this.config.extension;
+
     }
-  },
+
+},
 
   /*=========================================
-      DRAW FRAME
-    =========================================*/
+  DRAW FRAME
+=========================================*/
 
-  renderFrame(index) {
+renderFrame(index) {
+
+    if (!this.images[index]) {
+
+        return;
+
+    }
+
     const image = this.images[index];
-
-    if (!image) return;
 
     this.currentFrame = index;
 
@@ -263,45 +320,56 @@ const MotionEngine = {
     const canvasRatio = width / height;
 
     let drawWidth;
-
+    
     let drawHeight;
 
     if (canvasRatio > imageRatio) {
-      drawWidth = width;
 
-      drawHeight = width / imageRatio;
+        drawWidth = width;
+
+        drawHeight = width / imageRatio;
+
     } else {
-      drawHeight = height;
 
-      drawWidth = height * imageRatio;
+        drawHeight = height;
+
+        drawWidth = height * imageRatio;
+
     }
 
-    const drawX = (width - drawWidth) * 0.5;
+    const drawX = (width - drawWidth) * .5;
 
-    const drawY = (height - drawHeight) * 0.5;
+    const drawY = (height - drawHeight) * .5;
 
-    this.ctx.clearRect(
-      0,
+    this.ctx.fillStyle = "#000";
 
-      0,
+    this.ctx.fillRect(
 
-      width,
+        0,
 
-      height,
+        0,
+
+        width,
+
+        height
+
     );
 
     this.ctx.drawImage(
-      image,
 
-      drawX,
+        image,
 
-      drawY,
+        drawX,
 
-      drawWidth,
+        drawY,
 
-      drawHeight,
+        drawWidth,
+
+        drawHeight
+
     );
-  },
+
+},
 
   /*=========================================
       RENDER
