@@ -22,6 +22,12 @@ const MotionEngine = {
     debug: false,
     backgroundColor: "#000",
     desktopFit: "cover",
+    loadConcurrency: 4,
+    maxCachedFrames: 96,
+    lookAheadFrames: 18,
+    lookBehindFrames: 6,
+    progressiveBatchSize: 4,
+    retryFailedFrames: false,
   },
 
   /*=========================================
@@ -41,10 +47,23 @@ const MotionEngine = {
   scrollTween: null,
   scrollTrigger: null,
   resizeObserver: null,
+  resizeFallback: null,
   renderRAF: null,
   renderDirty: true,
   lastRenderKey: "",
   waitTimer: null,
+  frameCache: new Map(),
+  frameRequests: new Map(),
+  failedFrames: new Set(),
+  loadedFrameSet: new Set(),
+  preloadFrames: new Set(),
+  preloadSettledFrames: new Set(),
+  loadQueue: [],
+  loadingFrames: 0,
+  preloadTarget: 0,
+  scrollStarted: false,
+  progressiveIndex: 0,
+  progressiveHandle: null,
 
   /*=========================================
       INITIALIZE
@@ -61,6 +80,7 @@ const MotionEngine = {
     }
 
     this.images = new Array(this.config.frameCount);
+    this.resetImageState();
     this.waitForHero();
   },
 
@@ -279,6 +299,7 @@ const MotionEngine = {
     this.canvasWrap = null;
     this.ctx = null;
     this.images = [];
+    this.resetImageState();
     this.loadedFrames = 0;
     this.currentFrame = 0;
     this.requestedFrame = 0;
@@ -292,40 +313,294 @@ const MotionEngine = {
     =========================================*/
 
   loadImages() {
-    const preloadTarget = Math.max(1, Math.min(this.config.preloadFirst, this.config.frameCount));
+    this.images = new Array(this.config.frameCount);
+    this.resetImageState();
+    this.preloadTarget = Math.max(1, Math.min(this.config.preloadFirst, this.config.frameCount));
 
-    for (let index = 0; index < this.config.frameCount; index += 1) {
-      const image = new Image();
-
-      image.decoding = "async";
-
-      image.onload = () => {
-        this.images[index] = image;
-        this.loadedFrames += 1;
-
-        if (index === 0) {
-          this.scheduleRender(0);
-        }
-
-        if (this.loadedFrames === preloadTarget) {
-          this.startScroll();
-        }
-
-        if (this.loadedFrames === this.config.frameCount) {
-          this.log("All frames loaded");
-        }
-      };
-
-      image.onerror = () => {
-        console.warn("[Motion Engine] Frame failed:", index + 1);
-      };
-
-      image.src = this.getFrameURL(index);
+    for (let index = 0; index < this.preloadTarget; index += 1) {
+      this.preloadFrames.add(index);
+      this.requestImage(index, {
+        priority: true,
+        preload: true,
+      }).catch(() => {});
     }
+
+    this.queueFrameWindow(0);
   },
 
   getFrameURL(index) {
     return `${this.config.imagePath}${String(index + 1).padStart(6, "0")}${this.config.extension}`;
+  },
+
+  resetImageState() {
+    this.frameCache = new Map();
+    this.frameRequests = new Map();
+    this.failedFrames = new Set();
+    this.loadedFrameSet = new Set();
+    this.preloadFrames = new Set();
+    this.preloadSettledFrames = new Set();
+    this.loadQueue = [];
+    this.loadingFrames = 0;
+    this.loadedFrames = 0;
+    this.preloadTarget = 0;
+    this.scrollStarted = false;
+    this.progressiveIndex = 0;
+
+    if (this.progressiveHandle) {
+      this.cancelIdleTask(this.progressiveHandle);
+      this.progressiveHandle = null;
+    }
+  },
+
+  requestImage(index, options = {}) {
+    const frame = this.clampFrame(index);
+
+    if (this.frameCache.has(frame)) {
+      return Promise.resolve(this.getCachedImage(frame));
+    }
+
+    if (this.frameRequests.has(frame)) {
+      return this.frameRequests.get(frame);
+    }
+
+    if (this.failedFrames.has(frame) && !this.config.retryFailedFrames) {
+      return Promise.reject(new Error(`Frame ${frame + 1} previously failed`));
+    }
+
+    const promise = new Promise((resolve, reject) => {
+      const task = {
+        frame,
+        resolve,
+        reject,
+        preload: Boolean(options.preload),
+      };
+
+      if (options.priority) {
+        this.loadQueue.unshift(task);
+      } else {
+        this.loadQueue.push(task);
+      }
+
+      this.pumpLoadQueue();
+    });
+
+    this.frameRequests.set(frame, promise);
+
+    return promise;
+  },
+
+  pumpLoadQueue() {
+    const concurrency = Math.max(1, this.config.loadConcurrency);
+
+    while (this.loadingFrames < concurrency && this.loadQueue.length) {
+      const task = this.loadQueue.shift();
+      this.loadFrameTask(task);
+    }
+  },
+
+  loadFrameTask(task) {
+    this.loadingFrames += 1;
+
+    const image = new Image();
+    image.decoding = "async";
+
+    const finish = () => {
+      this.loadingFrames -= 1;
+      this.frameRequests.delete(task.frame);
+      this.markPreloadSettled(task.frame);
+      this.pumpLoadQueue();
+    };
+
+    const store = () => {
+      this.storeFrame(task.frame, image);
+      task.resolve(image);
+      finish();
+    };
+
+    image.onload = () => {
+      if (image.decode) {
+        image.decode().then(store).catch(store);
+        return;
+      }
+
+      store();
+    };
+
+    image.onerror = () => {
+      this.failedFrames.add(task.frame);
+      console.warn("[Motion Engine] Frame failed:", task.frame + 1);
+      task.reject(new Error(`Frame ${task.frame + 1} failed`));
+      finish();
+    };
+
+    image.src = this.getFrameURL(task.frame);
+  },
+
+  storeFrame(index, image) {
+    const frame = this.clampFrame(index);
+
+    this.frameCache.set(frame, {
+      image,
+      lastUsed: this.now(),
+    });
+    this.images[frame] = image;
+
+    if (!this.loadedFrameSet.has(frame)) {
+      this.loadedFrameSet.add(frame);
+      this.loadedFrames = this.loadedFrameSet.size;
+    }
+
+    this.evictFrames();
+    this.onFrameReady(frame);
+  },
+
+  getCachedImage(index) {
+    const frame = this.clampFrame(index);
+    const entry = this.frameCache.get(frame);
+
+    if (!entry) return null;
+
+    entry.lastUsed = this.now();
+    return entry.image;
+  },
+
+  onFrameReady(index) {
+    if (index === 0 || index === this.requestedFrame) {
+      this.scheduleRender(index);
+    }
+
+    if (this.loadedFrames === this.config.frameCount) {
+      this.log("All frames loaded");
+    }
+  },
+
+  markPreloadSettled(index) {
+    if (!this.preloadFrames.has(index) || this.preloadSettledFrames.has(index)) return;
+
+    this.preloadSettledFrames.add(index);
+
+    if (!this.scrollStarted && this.preloadSettledFrames.size >= this.preloadTarget) {
+      this.scrollStarted = true;
+      this.startScroll();
+      this.startProgressiveLoading();
+    }
+  },
+
+  queueFrameWindow(index) {
+    const frame = this.clampFrame(index);
+    const start = Math.max(0, frame - this.config.lookBehindFrames);
+    const end = Math.min(this.config.frameCount - 1, frame + this.config.lookAheadFrames);
+
+    this.requestImage(frame, {
+      priority: true,
+    }).catch(() => {});
+
+    for (let next = frame + 1; next <= end; next += 1) {
+      this.requestImage(next).catch(() => {});
+    }
+
+    for (let previous = frame - 1; previous >= start; previous -= 1) {
+      this.requestImage(previous).catch(() => {});
+    }
+  },
+
+  startProgressiveLoading() {
+    this.progressiveIndex = Math.max(this.preloadTarget, this.progressiveIndex);
+    this.scheduleProgressiveLoad();
+  },
+
+  scheduleProgressiveLoad() {
+    if (this.progressiveHandle || this.progressiveIndex >= this.config.frameCount) return;
+
+    this.progressiveHandle = this.requestIdleTask(() => {
+      this.progressiveHandle = null;
+      this.loadProgressiveBatch();
+    });
+  },
+
+  loadProgressiveBatch() {
+    let queued = 0;
+    const batchSize = Math.max(1, this.config.progressiveBatchSize);
+    const maxCached = this.getMaxCachedFrames();
+
+    while (
+      queued < batchSize &&
+      this.progressiveIndex < this.config.frameCount &&
+      this.frameCache.size + this.frameRequests.size < maxCached
+    ) {
+      this.requestImage(this.progressiveIndex).catch(() => {});
+      this.progressiveIndex += 1;
+      queued += 1;
+    }
+
+    if (
+      this.progressiveIndex < this.config.frameCount &&
+      this.frameCache.size + this.frameRequests.size < maxCached
+    ) {
+      this.scheduleProgressiveLoad();
+    }
+  },
+
+  evictFrames() {
+    const maxCached = this.getMaxCachedFrames();
+
+    if (this.frameCache.size <= maxCached) return;
+
+    const protectedFrames = this.getProtectedFrames();
+    const entries = [...this.frameCache.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+
+    for (const [frame] of entries) {
+      if (this.frameCache.size <= maxCached) return;
+      if (protectedFrames.has(frame)) continue;
+
+      this.frameCache.delete(frame);
+      this.images[frame] = undefined;
+    }
+
+    this.scheduleProgressiveLoad();
+  },
+
+  getMaxCachedFrames() {
+    return Math.max(
+      this.preloadTarget || 1,
+      this.config.lookAheadFrames + this.config.lookBehindFrames + 2,
+      this.config.maxCachedFrames || this.config.frameCount,
+    );
+  },
+
+  getProtectedFrames() {
+    const protectedFrames = new Set([this.currentFrame, this.requestedFrame, 0]);
+    const start = Math.max(0, this.requestedFrame - this.config.lookBehindFrames);
+    const end = Math.min(this.config.frameCount - 1, this.requestedFrame + this.config.lookAheadFrames);
+
+    for (let frame = start; frame <= end; frame += 1) {
+      protectedFrames.add(frame);
+    }
+
+    return protectedFrames;
+  },
+
+  requestIdleTask(callback) {
+    if ("requestIdleCallback" in window) {
+      return window.requestIdleCallback(callback, {
+        timeout: 500,
+      });
+    }
+
+    return window.setTimeout(callback, 80);
+  },
+
+  cancelIdleTask(handle) {
+    if ("cancelIdleCallback" in window) {
+      window.cancelIdleCallback(handle);
+      return;
+    }
+
+    window.clearTimeout(handle);
+  },
+
+  now() {
+    return window.performance && window.performance.now ? window.performance.now() : Date.now();
   },
 
   /*=========================================
@@ -336,6 +611,7 @@ const MotionEngine = {
     const frame = this.clampFrame(index);
 
     this.requestedFrame = frame;
+    this.queueFrameWindow(frame);
 
     if (this.renderRAF) return;
 
@@ -349,7 +625,7 @@ const MotionEngine = {
     if (!this.canvas || !this.ctx) return;
 
     const frame = this.clampFrame(this.requestedFrame);
-    const image = this.images[frame];
+    const image = this.getCachedImage(frame);
 
     if (!image) return;
 
