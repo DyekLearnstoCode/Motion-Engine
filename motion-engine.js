@@ -867,11 +867,14 @@ const MotionEngine = {
 
   killTimeline() {
     const timeline = this.masterTimeline || this.scrollTween;
+    const trigger = this.scrollTrigger || (timeline && timeline.scrollTrigger);
+
+    if (trigger) {
+      trigger.kill();
+    }
 
     if (timeline) {
       timeline.kill();
-    } else if (this.scrollTrigger) {
-      this.scrollTrigger.kill();
     }
 
     this.masterTimeline = null;
@@ -1055,5 +1058,5 @@ const MotionEngine = {
 
 if (typeof window !== "undefined") {
   window.MotionEngine = MotionEngine;
-  MotionEngine.init();
+  MotionEngine.init(window.MotionEngineConfig || window.motionEngineConfig || {});
 }
