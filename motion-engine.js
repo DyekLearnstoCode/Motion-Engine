@@ -29,6 +29,12 @@ const MotionEngine = {
     desktopPinSpacing: false,
     mobilePinSpacing: true,
     mobileScrollLength: null,
+    progressSelector: "[data-motion-progress], .motion-progress",
+    captionSelector: "[data-motion-caption], .motion-caption",
+    navbarSelector: "[data-motion-navbar], .motion-navbar, .navbar",
+    scrollIndicatorSelector: "[data-motion-scroll-indicator], .motion-scroll-indicator",
+    captionFadeDuration: 0.08,
+    libraryRetryDelay: 100,
     loadConcurrency: 4,
     maxCachedFrames: 96,
     lookAheadFrames: 18,
@@ -51,6 +57,7 @@ const MotionEngine = {
   requestedFrame: 0,
   loadedFrames: 0,
   initialized: false,
+  masterTimeline: null,
   scrollTween: null,
   scrollTrigger: null,
   resizeObserver: null,
@@ -60,6 +67,7 @@ const MotionEngine = {
   renderDirty: true,
   lastRenderKey: "",
   waitTimer: null,
+  libraryTimer: null,
   frameCache: new Map(),
   frameRequests: new Map(),
   failedFrames: new Set(),
@@ -374,20 +382,17 @@ const MotionEngine = {
       this.waitTimer = null;
     }
 
+    if (this.libraryTimer) {
+      window.clearTimeout(this.libraryTimer);
+      this.libraryTimer = null;
+    }
+
     if (this.renderRAF) {
       window.cancelAnimationFrame(this.renderRAF);
       this.renderRAF = null;
     }
 
-    if (this.scrollTween) {
-      this.scrollTween.kill();
-      this.scrollTween = null;
-    }
-
-    if (this.scrollTrigger) {
-      this.scrollTrigger.kill();
-      this.scrollTrigger = null;
-    }
+    this.killTimeline();
 
     this.disconnectResizeObserver();
 
@@ -406,6 +411,9 @@ const MotionEngine = {
     this.currentFrame = 0;
     this.requestedFrame = 0;
     this.initialized = false;
+    this.masterTimeline = null;
+    this.scrollTween = null;
+    this.scrollTrigger = null;
     this.mode = "desktop";
     this.renderDirty = true;
     this.lastRenderKey = "";
@@ -800,44 +808,228 @@ const MotionEngine = {
     =========================================*/
 
   startScroll() {
-    if (!window.gsap || !window.ScrollTrigger) {
-      console.warn("[Motion Engine] GSAP and ScrollTrigger are required.");
+    if (!this.hasMotionLibraries()) {
+      this.waitForMotionLibraries();
       return;
     }
 
-    if (this.scrollTween) {
-      this.scrollTween.kill();
-      this.scrollTween = null;
+    if (window.gsap.registerPlugin) {
+      window.gsap.registerPlugin(window.ScrollTrigger);
     }
+
+    this.killTimeline();
 
     const playhead = {
       frame: 0,
     };
 
-    this.scrollTween = window.gsap.to(playhead, {
+    const timeline = window.gsap.timeline({
+      defaults: {
+        ease: "none",
+      },
+      scrollTrigger: this.getScrollTriggerConfig(),
+    });
+
+    timeline.to(playhead, {
       frame: this.config.frameCount - 1,
-      ease: "none",
+      duration: 1,
       onUpdate: () => {
         this.renderFrame(playhead.frame);
       },
-      scrollTrigger: {
-        trigger: this.getScrollTriggerElement(),
-        start: "top top",
-        end: `+=${this.getScrollLength()}`,
-        pin: this.config.pin ? this.getPinElement() : false,
-        pinSpacing: this.getPinSpacing(),
-        scrub: this.config.scrub,
-        anticipatePin: 1,
-        fastScrollEnd: true,
-        invalidateOnRefresh: true,
-        onRefresh: (self) => {
-          this.scrollTrigger = self;
-        },
+    }, 0);
+
+    this.addProgressToTimeline(timeline);
+    this.addCaptionsToTimeline(timeline);
+    this.addNavbarToTimeline(timeline);
+    this.addScrollIndicatorToTimeline(timeline);
+
+    this.masterTimeline = timeline;
+    this.scrollTween = timeline;
+    this.scrollTrigger = timeline.scrollTrigger || this.scrollTrigger;
+    this.refreshScrollTrigger(true);
+  },
+
+  hasMotionLibraries() {
+    return Boolean(window.gsap && window.ScrollTrigger);
+  },
+
+  waitForMotionLibraries() {
+    if (this.libraryTimer) return;
+
+    this.libraryTimer = window.setTimeout(() => {
+      this.libraryTimer = null;
+
+      if (this.initialized) {
+        this.startScroll();
+      }
+    }, this.config.libraryRetryDelay);
+  },
+
+  killTimeline() {
+    const timeline = this.masterTimeline || this.scrollTween;
+
+    if (timeline) {
+      timeline.kill();
+    } else if (this.scrollTrigger) {
+      this.scrollTrigger.kill();
+    }
+
+    this.masterTimeline = null;
+    this.scrollTween = null;
+    this.scrollTrigger = null;
+  },
+
+  getScrollTriggerConfig() {
+    return {
+      trigger: this.getScrollTriggerElement(),
+      start: "top top",
+      end: `+=${this.getScrollLength()}`,
+      pin: this.config.pin ? this.getPinElement() : false,
+      pinSpacing: this.getPinSpacing(),
+      scrub: this.config.scrub,
+      anticipatePin: 1,
+      fastScrollEnd: true,
+      invalidateOnRefresh: true,
+      onRefresh: (self) => {
+        this.scrollTrigger = self;
       },
+    };
+  },
+
+  addProgressToTimeline(timeline) {
+    const progressElements = this.getElements(this.config.progressSelector);
+
+    if (!progressElements.length) return;
+
+    window.gsap.set(progressElements, {
+      scaleX: 0,
+      transformOrigin: "left center",
+    });
+    timeline.to(progressElements, {
+      scaleX: 1,
+      duration: 1,
+    }, 0);
+  },
+
+  addCaptionsToTimeline(timeline) {
+    const captions = this.getElements(this.config.captionSelector);
+
+    if (!captions.length) return;
+
+    const fade = this.clampProgress(this.config.captionFadeDuration);
+
+    window.gsap.set(captions, {
+      autoAlpha: 0,
     });
 
-    this.scrollTrigger = this.scrollTween.scrollTrigger || this.scrollTrigger;
-    this.refreshScrollTrigger(true);
+    captions.forEach((caption, index) => {
+      const bounds = this.getCaptionBounds(caption, index, captions.length);
+      const fadeDuration = Math.min(fade, Math.max(0.01, (bounds.end - bounds.start) * 0.5));
+
+      timeline.to(caption, {
+        autoAlpha: 1,
+        duration: fadeDuration,
+      }, bounds.start);
+
+      timeline.to(caption, {
+        autoAlpha: 0,
+        duration: fadeDuration,
+      }, Math.max(bounds.start, bounds.end - fadeDuration));
+    });
+  },
+
+  addNavbarToTimeline(timeline) {
+    const navbars = this.getElements(this.config.navbarSelector);
+
+    if (!navbars.length) return;
+
+    window.gsap.set(navbars, {
+      clearProps: "transform,opacity,visibility",
+      willChange: "transform, opacity",
+    });
+
+    timeline.to(navbars, {
+      autoAlpha: 0,
+      yPercent: -100,
+      duration: 0.12,
+    }, 0);
+
+    timeline.to(navbars, {
+      autoAlpha: 1,
+      yPercent: 0,
+      duration: 0.12,
+    }, 0.88);
+  },
+
+  addScrollIndicatorToTimeline(timeline) {
+    const indicators = this.getElements(this.config.scrollIndicatorSelector);
+
+    if (!indicators.length) return;
+
+    timeline.to(indicators, {
+      autoAlpha: 0,
+      y: 16,
+      duration: 0.14,
+    }, 0);
+  },
+
+  getCaptionBounds(caption, index, total) {
+    const segment = 1 / Math.max(1, total);
+    const fallbackStart = segment * index;
+    const fallbackEnd = Math.min(1, fallbackStart + segment);
+    const start = this.readTimelinePoint(caption, ["motionStart", "start", "frameStart"], fallbackStart);
+    const end = this.readTimelinePoint(caption, ["motionEnd", "end", "frameEnd"], fallbackEnd);
+
+    return {
+      start: this.clampProgress(Math.min(start, end)),
+      end: this.clampProgress(Math.max(start, end)),
+    };
+  },
+
+  readTimelinePoint(element, keys, fallback) {
+    for (const key of keys) {
+      const value = element.dataset[key];
+
+      if (value !== undefined) {
+        return this.parseTimelinePoint(value, fallback);
+      }
+    }
+
+    return fallback;
+  },
+
+  parseTimelinePoint(value, fallback) {
+    if (value === null || value === undefined || value === "") return fallback;
+
+    const text = String(value).trim();
+
+    if (text.endsWith("%")) {
+      return this.clampProgress(Number(text.slice(0, -1)) / 100);
+    }
+
+    const number = Number(text);
+
+    if (!Number.isFinite(number)) return fallback;
+    if (number > 1) return this.clampProgress(number / Math.max(1, this.config.frameCount - 1));
+
+    return this.clampProgress(number);
+  },
+
+  clampProgress(value) {
+    const progress = Number.isFinite(value) ? value : 0;
+
+    return Math.max(0, Math.min(1, progress));
+  },
+
+  getElements(selector) {
+    if (!selector) return [];
+
+    try {
+      return [...document.querySelectorAll(selector)];
+    } catch (error) {
+      this.log("Invalid selector skipped", selector);
+      return [];
+    }
   },
 
   getScrollTriggerElement() {
