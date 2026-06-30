@@ -21,7 +21,14 @@ const MotionEngine = {
     loader: true,
     debug: false,
     backgroundColor: "#000",
+    renderMode: "auto",
+    mobileBreakpoint: 767,
+    mobileAspectRatio: 16 / 9,
     desktopFit: "cover",
+    mobileFit: "contain",
+    desktopPinSpacing: false,
+    mobilePinSpacing: true,
+    mobileScrollLength: null,
     loadConcurrency: 4,
     maxCachedFrames: 96,
     lookAheadFrames: 18,
@@ -48,6 +55,7 @@ const MotionEngine = {
   scrollTrigger: null,
   resizeObserver: null,
   resizeFallback: null,
+  mode: "desktop",
   renderRAF: null,
   renderDirty: true,
   lastRenderKey: "",
@@ -159,29 +167,113 @@ const MotionEngine = {
   },
 
   applyBaseLayout() {
+    const nextMode = this.getRenderMode();
+    const modeChanged = nextMode !== this.mode;
     const heroPosition = window.getComputedStyle(this.hero).position;
+
+    this.mode = nextMode;
 
     if (heroPosition === "static") {
       this.hero.style.position = "relative";
     }
-
-    this.hero.style.minHeight = "100vh";
-    this.hero.style.overflow = "hidden";
-
-    Object.assign(this.canvasWrap.style, {
-      position: "absolute",
-      inset: "0",
-      width: "100%",
-      height: "100vh",
-      overflow: "hidden",
-      zIndex: "0",
-    });
 
     Object.assign(this.canvas.style, {
       display: "block",
       width: "100%",
       height: "100%",
     });
+
+    if (this.mode === "mobile") {
+      this.applyMobileLayout();
+    } else {
+      this.applyDesktopLayout();
+    }
+
+    return modeChanged;
+  },
+
+  applyDesktopLayout() {
+    Object.assign(this.hero.style, {
+      minHeight: "100vh",
+      overflow: "hidden",
+    });
+
+    Object.assign(this.heroInner.style, {
+      position: "relative",
+      minHeight: "100vh",
+    });
+
+    Object.assign(this.canvasWrap.style, {
+      position: "absolute",
+      display: "block",
+      inset: "0",
+      width: "100%",
+      height: "100vh",
+      aspectRatio: "auto",
+      overflow: "hidden",
+      zIndex: "0",
+    });
+  },
+
+  applyMobileLayout() {
+    Object.assign(this.hero.style, {
+      minHeight: "0",
+      overflow: "visible",
+    });
+
+    Object.assign(this.heroInner.style, {
+      position: "relative",
+      minHeight: "0",
+    });
+
+    Object.assign(this.canvasWrap.style, {
+      position: "relative",
+      display: "block",
+      inset: "auto",
+      width: "100%",
+      height: "auto",
+      aspectRatio: this.getMobileAspectRatioCSS(),
+      overflow: "hidden",
+      zIndex: "0",
+    });
+  },
+
+  getRenderMode() {
+    if (this.config.renderMode === "desktop" || this.config.renderMode === "mobile") {
+      return this.config.renderMode;
+    }
+
+    return window.innerWidth <= this.config.mobileBreakpoint ? "mobile" : "desktop";
+  },
+
+  getFitMode() {
+    return this.mode === "mobile" ? this.config.mobileFit : this.config.desktopFit;
+  },
+
+  getMobileAspectRatio() {
+    const ratio = this.config.mobileAspectRatio;
+
+    if (typeof ratio === "number" && ratio > 0) {
+      return ratio;
+    }
+
+    if (typeof ratio === "string" && ratio.includes("/")) {
+      const [width, height] = ratio.split("/").map((part) => Number(part.trim()));
+
+      if (width > 0 && height > 0) {
+        return width / height;
+      }
+    }
+
+    return 16 / 9;
+  },
+
+  getMobileAspectRatioCSS() {
+    if (typeof this.config.mobileAspectRatio === "string") {
+      return this.config.mobileAspectRatio;
+    }
+
+    return `${this.getMobileAspectRatio()} / 1`;
   },
 
   observeResize() {
@@ -217,6 +309,7 @@ const MotionEngine = {
   resize() {
     if (!this.canvas || !this.ctx) return;
 
+    const modeChanged = this.applyBaseLayout();
     const dpr = window.devicePixelRatio || 1;
     const size = this.getCanvasSize();
     const nextWidth = Math.max(1, Math.round(size.width * dpr));
@@ -229,9 +322,14 @@ const MotionEngine = {
     this.canvas.style.height = `${size.height}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    if (changed) {
+    if (changed || modeChanged) {
       this.renderDirty = true;
       this.scheduleRender(this.currentFrame);
+    }
+
+    if (modeChanged && this.scrollStarted) {
+      this.startScroll();
+      return;
     }
 
     this.refreshScrollTrigger();
@@ -241,7 +339,11 @@ const MotionEngine = {
     const wrapRect = this.canvasWrap.getBoundingClientRect();
     const heroRect = this.hero.getBoundingClientRect();
     const width = wrapRect.width || heroRect.width || window.innerWidth;
-    const height = wrapRect.height || heroRect.height || window.innerHeight;
+    let height = wrapRect.height || heroRect.height || window.innerHeight;
+
+    if (this.mode === "mobile") {
+      height = wrapRect.height || width / this.getMobileAspectRatio();
+    }
 
     return {
       width,
@@ -304,6 +406,7 @@ const MotionEngine = {
     this.currentFrame = 0;
     this.requestedFrame = 0;
     this.initialized = false;
+    this.mode = "desktop";
     this.renderDirty = true;
     this.lastRenderKey = "";
   },
@@ -646,7 +749,8 @@ const MotionEngine = {
       frame,
       this.canvas.width,
       this.canvas.height,
-      this.config.desktopFit,
+      this.mode,
+      this.getFitMode(),
     ].join(":");
   },
 
@@ -654,7 +758,7 @@ const MotionEngine = {
     if (!image || !this.ctx) return;
 
     const size = this.getCanvasSize();
-    const rect = this.getDrawRect(image, size.width, size.height, this.config.desktopFit);
+    const rect = this.getDrawRect(image, size.width, size.height, this.getFitMode());
 
     this.ctx.fillStyle = this.config.backgroundColor;
     this.ctx.fillRect(0, 0, size.width, size.height);
@@ -717,11 +821,11 @@ const MotionEngine = {
         this.renderFrame(playhead.frame);
       },
       scrollTrigger: {
-        trigger: this.hero,
+        trigger: this.getScrollTriggerElement(),
         start: "top top",
-        end: `+=${this.config.scrollLength}`,
-        pin: this.config.pin,
-        pinSpacing: false,
+        end: `+=${this.getScrollLength()}`,
+        pin: this.config.pin ? this.getPinElement() : false,
+        pinSpacing: this.getPinSpacing(),
         scrub: this.config.scrub,
         anticipatePin: 1,
         fastScrollEnd: true,
@@ -734,6 +838,26 @@ const MotionEngine = {
 
     this.scrollTrigger = this.scrollTween.scrollTrigger || this.scrollTrigger;
     this.refreshScrollTrigger(true);
+  },
+
+  getScrollTriggerElement() {
+    return this.mode === "mobile" ? this.canvasWrap : this.hero;
+  },
+
+  getPinElement() {
+    return this.mode === "mobile" ? this.canvasWrap : this.hero;
+  },
+
+  getPinSpacing() {
+    return this.mode === "mobile" ? this.config.mobilePinSpacing : this.config.desktopPinSpacing;
+  },
+
+  getScrollLength() {
+    if (this.mode === "mobile" && this.config.mobileScrollLength) {
+      return this.config.mobileScrollLength;
+    }
+
+    return this.config.scrollLength;
   },
 };
 
