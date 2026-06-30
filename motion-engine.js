@@ -15,7 +15,7 @@ const MotionEngine = {
 
     frameCount: 241,
 
-    imagePath:"https://dyeklearnstocode.github.io/Motion-Engine/frames/frame_",
+    imagePath: "https://dyeklearnstocode.github.io/Motion-Engine/frames/frame_",
 
     extension: ".jpg",
 
@@ -222,89 +222,57 @@ const MotionEngine = {
   LOAD IMAGES
 =========================================*/
 
-loadImages() {
-
+  loadImages() {
     const preloadTarget = this.config.preloadFirst;
 
     for (let i = 0; i < this.config.frameCount; i++) {
+      const image = new Image();
 
-        const image = new Image();
+      image.decoding = "async";
 
-        image.decoding = "async";
+      image.onload = () => {
+        this.images[i] = image;
 
-        image.onload = () => {
+        this.loadedFrames++;
 
-            this.images[i] = image;
+        // Draw the very first frame immediately
+        if (i === 0) {
+          this.renderFrame(0);
+        }
 
-            this.loadedFrames++;
+        // Enable scrolling after preload target
+        if (this.loadedFrames === preloadTarget) {
+          this.startScroll();
+        }
 
-            // Draw the very first frame immediately
-            if (i === 0) {
+        // Everything loaded
+        if (this.loadedFrames === this.config.frameCount) {
+          this.log("All Frames Loaded");
+        }
+      };
 
-                this.renderFrame(0);
+      image.onerror = () => {
+        console.warn(
+          "Frame failed:",
 
-            }
+          i + 1,
+        );
+      };
 
-            // Enable scrolling after preload target
-            if (
-
-                this.loadedFrames === preloadTarget
-
-            ) {
-
-                this.startScroll();
-
-            }
-
-            // Everything loaded
-            if (
-
-                this.loadedFrames === this.config.frameCount
-
-            ) {
-
-                this.log("All Frames Loaded");
-
-            }
-
-        };
-
-        image.onerror = () => {
-
-            console.warn(
-
-                "Frame failed:",
-
-                i + 1
-
-            );
-
-        };
-
-        image.src =
-
-            this.config.imagePath +
-
-            String(i + 1)
-
-                .padStart(6, "0") +
-
-            this.config.extension;
-
+      image.src =
+        this.config.imagePath +
+        String(i + 1).padStart(6, "0") +
+        this.config.extension;
     }
-
-},
+  },
 
   /*=========================================
   DRAW FRAME
 =========================================*/
 
-renderFrame(index) {
-
+  renderFrame(index) {
     if (!this.images[index]) {
-
-        return;
-
+      return;
     }
 
     const image = this.images[index];
@@ -320,56 +288,47 @@ renderFrame(index) {
     const canvasRatio = width / height;
 
     let drawWidth;
-    
+
     let drawHeight;
 
     if (canvasRatio > imageRatio) {
+      drawWidth = width;
 
-        drawWidth = width;
-
-        drawHeight = width / imageRatio;
-
+      drawHeight = width / imageRatio;
     } else {
+      drawHeight = height;
 
-        drawHeight = height;
-
-        drawWidth = height * imageRatio;
-
+      drawWidth = height * imageRatio;
     }
 
-    const drawX = (width - drawWidth) * .5;
+    const drawX = (width - drawWidth) * 0.5;
 
-    const drawY = (height - drawHeight) * .5;
+    const drawY = (height - drawHeight) * 0.5;
 
     this.ctx.fillStyle = "#000";
 
     this.ctx.fillRect(
+      0,
 
-        0,
+      0,
 
-        0,
+      width,
 
-        width,
-
-        height
-
+      height,
     );
 
     this.ctx.drawImage(
+      image,
 
-        image,
+      drawX,
 
-        drawX,
+      drawY,
 
-        drawY,
+      drawWidth,
 
-        drawWidth,
-
-        drawHeight
-
+      drawHeight,
     );
-
-},
+  },
 
   /*=========================================
       RENDER
@@ -415,11 +374,15 @@ renderFrame(index) {
 
           end: "+=" + this.config.scrollLength,
 
-          pin: this.config.pin,
+          pin: true,
+
+          pinSpacing: false,
 
           scrub: this.config.scrub,
 
           anticipatePin: 1,
+
+          fastScrollEnd: true,
 
           invalidateOnRefresh: true,
         },
