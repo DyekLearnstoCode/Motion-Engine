@@ -1,569 +1,307 @@
-/*==========================================================
-    Motion Engine Video V1
-    Phase 1A
-==========================================================*/
-
 const MotionEngine = {
+  config: {
+    hero: ".motion-hero",
 
-    /*=========================================
-        CONFIG
-    =========================================*/
+    media: ".motion-media",
 
-    config:{
+    canvas: "#heroCanvas",
 
-        heroSelector:".motion-hero",
+    video: "#heroVideo",
 
-        canvasID:"heroCanvas",
+    progress: ".motion-progress span",
 
-        videoPath: "https://dyeklearnstocode.github.io/Motion-Engine/videos/frame.mp4",
+    mobileBreakpoint: 768,
 
-        scrollLength:14000,
+    desktopFit: "cover",
 
-        scrub:0.35,
+    mobileFit: "contain",
 
-        pin:true,
+    scrollLength: 14000,
 
-        pinSpacing:true,
+    scrub: 0.35,
+  },
 
-        mobilePinSpacing:false,
+  hero: null,
 
-        mobileBreakpoint:768,
+  media: null,
 
-        desktopFit:"cover",
+  canvas: null,
 
-        mobileFit:"contain",
+  ctx: null,
 
-        backgroundColor:"#000",
+  video: null,
 
-        debug:false
+  progress: null,
 
-    },
+  resizeObserver: null,
 
-    /*=========================================
-        STATE
-    =========================================*/
+  tween: null,
 
-    hero:null,
+  initialized: false,
 
-    media:null,
+  init() {
+    if (this.initialized) return;
 
-    overlay:null,
+    this.hero = document.querySelector(this.config.hero);
 
-    content:null,
+    if (!this.hero) {
+      requestAnimationFrame(() => this.init());
 
-    footer:null,
-
-    progress:null,
-
-    canvas:null,
-
-    ctx:null,
-
-    video:null,
-
-    resizeObserver:null,
-
-    resizeFallback:null,
-
-    scrollTween:null,
-
-    scrollTrigger:null,
-
-    initialized:false,
-
-    ready:false,
-
-    videoReady:false,
-
-    currentTime:0,
-
-    renderRAF:null,
-
-    renderDirty:true,
-
-    waitTimer:null,
-
-    /*=========================================
-        INIT
-    =========================================*/
-
-    init(options={}){
-
-        if(this.initialized) return;
-
-        if(typeof options==="object"){
-
-            this.config={
-
-                ...this.config,
-
-                ...options
-
-            };
-
-        }
-
-        this.waitForHero();
-
-    },
-
-    /*=========================================
-        WAIT FOR HERO
-    =========================================*/
-
-    waitForHero(){
-
-        const hero=document.querySelector(this.config.heroSelector);
-
-        if(!hero){
-
-            this.waitTimer=setTimeout(()=>{
-
-                this.waitForHero();
-
-            },100);
-
-            return;
-
-        }
-
-        this.hero=hero;
-
-        this.media=hero.querySelector(".motion-media");
-
-        this.overlay=hero.querySelector(".motion-overlay");
-
-        this.content=hero.querySelector(".motion-content");
-
-        this.footer=hero.querySelector(".motion-footer");
-
-        this.progress=hero.querySelector(".motion-progress span");
-
-        this.canvas=hero.querySelector("#"+this.config.canvasID);
-
-        if(!this.media){
-
-            console.error("MotionEngine: .motion-media not found.");
-
-            return;
-
-        }
-
-        if(!this.canvas){
-
-            console.error("MotionEngine: Canvas not found.");
-
-            return;
-
-        }
-
-        this.initialized=true;
-
-        this.hero.classList.add("is-loading");
-
-        this.createCanvas();
-
-        this.createVideo();
-
-    },
-
-    /*=========================================
-        CREATE CANVAS
-    =========================================*/
-
-    createCanvas(){
-
-        this.ctx=this.canvas.getContext("2d",{
-
-            alpha:false,
-
-            desynchronized:true
-
-        });
-
-    },
-
-    /*=========================================
-        CREATE VIDEO
-    =========================================*/
-
-    createVideo(){
-
-        const video=document.createElement("video");
-
-        video.preload="auto";
-
-        video.muted=true;
-
-        video.loop=false;
-
-        video.playsInline=true;
-
-        video.crossOrigin="anonymous";
-
-        video.setAttribute("playsinline","");
-
-        video.setAttribute("webkit-playsinline","");
-
-        video.src=this.config.videoPath;
-
-        video.style.display="none";
-
-        this.video=video;
-
-        document.body.appendChild(video);
-
-        video.addEventListener("loadedmetadata",()=>{
-
-            this.videoReady=true;
-
-            this.resize();
-
-            video.currentTime=0;
-
-        });
-
-        video.addEventListener("seeked",()=>{
-
-            this.draw();
-
-        });
-
-        video.addEventListener("canplay",()=>{
-
-            this.observeResize();
-
-            this.startScroll();
-
-        });
-
-        video.load();
-
-    },
-
-    /*=========================================
-    RESIZE OBSERVER
-=========================================*/
-
-observeResize(){
-
-    this.disconnectResizeObserver();
-
-    if("ResizeObserver" in window){
-
-        this.resizeObserver=new ResizeObserver(()=>{
-
-            this.resize();
-
-        });
-
-        this.resizeObserver.observe(this.media);
-
-        return;
-
+      return;
     }
 
-    this.resizeFallback=()=>{
+    this.media = this.hero.querySelector(this.config.media);
+
+    this.canvas = this.hero.querySelector(this.config.canvas);
+
+    this.video = this.hero.querySelector(this.config.video);
+
+    this.progress = this.hero.querySelector(this.config.progress);
+
+    if (!this.media || !this.canvas || !this.video) {
+      requestAnimationFrame(() => this.init());
+
+      return;
+    }
+
+    this.ctx = this.canvas.getContext("2d", {
+      alpha: false,
+
+      desynchronized: true,
+    });
+
+    this.initialized = true;
+
+    this.bindVideo();
+  },
+
+  bindVideo() {
+    this.video.pause();
+
+    this.video.currentTime = 0;
+
+    this.video.addEventListener(
+      "loadedmetadata",
+
+      () => {
+        this.updateLayout();
 
         this.resize();
 
-    };
+        this.observe();
 
-    window.addEventListener("resize",this.resizeFallback);
+        this.bindEvents();
 
-},
+        this.drawFirstFrame();
 
-disconnectResizeObserver(){
+        this.startScroll();
+      },
 
-    if(this.resizeObserver){
+      { once: true },
+    );
+  },
 
-        this.resizeObserver.disconnect();
-
-        this.resizeObserver=null;
-
-    }
-
-    if(this.resizeFallback){
-
-        window.removeEventListener("resize",this.resizeFallback);
-
-        this.resizeFallback=null;
-
-    }
-
-},
-
-/*=========================================
-    RESIZE
+  /*=========================================
+    ADD THIS AFTER bindVideo()
 =========================================*/
 
-resize(){
+  bindEvents() {
+    this.video.addEventListener(
+      "seeked",
 
-    if(!this.canvas) return;
-
-    if(!this.ctx) return;
-
-    const size=this.getCanvasSize();
-
-    const dpr=window.devicePixelRatio||1;
-
-    this.canvas.width=Math.round(size.width*dpr);
-
-    this.canvas.height=Math.round(size.height*dpr);
-
-    this.canvas.style.width=size.width+"px";
-
-    this.canvas.style.height=size.height+"px";
-
-    this.ctx.setTransform(
-
-        dpr,
-
-        0,
-
-        0,
-
-        dpr,
-
-        0,
-
-        0
-
+      () => {
+        this.render();
+      },
     );
 
-    this.renderDirty=true;
+    this.video.addEventListener(
+      "loadeddata",
 
-    this.draw();
-
-},
-
-/*=========================================
-    CANVAS SIZE
-=========================================*/
-
-getCanvasSize(){
-
-    const rect=this.media.getBoundingClientRect();
-
-    return{
-
-        width:Math.max(1,Math.round(rect.width)),
-
-        height:Math.max(1,Math.round(rect.height))
-
-    };
-
-},
-
-/*=========================================
-    DRAW
-=========================================*/
-
-draw(){
-
-    if(!this.videoReady) return;
-
-    if(this.renderRAF) return;
-
-    this.renderRAF=requestAnimationFrame(()=>{
-
-        this.renderRAF=null;
-
+      () => {
         this.render();
+      },
+    );
 
+    this.video.addEventListener(
+      "canplay",
+
+      () => {
+        this.render();
+      },
+    );
+
+    window.addEventListener(
+      "resize",
+
+      () => {
+        this.resize();
+
+        ScrollTrigger.refresh();
+      },
+    );
+  },
+
+  /*=========================================
+    PLAY FIRST FRAME
+=========================================*/
+
+  drawFirstFrame() {
+    this.video.currentTime = 0;
+
+    this.render();
+  },
+
+  /*=========================================
+    MOBILE LAYOUT
+=========================================*/
+
+  updateLayout() {
+    if (window.innerWidth <= this.config.mobileBreakpoint) {
+      this.hero.classList.add("is-mobile");
+
+      this.hero.classList.remove("is-desktop");
+    } else {
+      this.hero.classList.add("is-desktop");
+
+      this.hero.classList.remove("is-mobile");
+    }
+  },
+
+  /*=========================================
+    RAF RENDER
+=========================================*/
+
+  requestRender() {
+    if (this.rendering) return;
+
+    this.rendering = true;
+
+    requestAnimationFrame(() => {
+      this.rendering = false;
+
+      this.render();
+    });
+  },
+
+  observe() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+    }
+
+    this.resizeObserver = new ResizeObserver(() => {
+      this.resize();
+
+      this.render();
     });
 
-},
+    this.resizeObserver.observe(this.media);
+  },
 
-render(){
+  resize() {
+    const rect = this.media.getBoundingClientRect();
 
-    if(!this.video) return;
+    const dpr = window.devicePixelRatio || 1;
 
-    if(this.video.readyState<2) return;
+    this.canvas.width = Math.round(rect.width * dpr);
 
-    const width=this.canvas.clientWidth;
+    this.canvas.height = Math.round(rect.height * dpr);
 
-    const height=this.canvas.clientHeight;
+    this.canvas.style.width = rect.width + "px";
 
-    const rect=this.getDrawRect(
+    this.canvas.style.height = rect.height + "px";
 
-        this.video.videoWidth,
+    this.ctx.setTransform(
+      dpr,
 
-        this.video.videoHeight,
+      0,
 
-        width,
+      0,
 
-        height,
+      dpr,
 
-        this.isMobile()
+      0,
 
-            ?this.config.mobileFit
-
-            :this.config.desktopFit
-
+      0,
     );
+  },
+
+  render() {
+    if (this.video.readyState < 2) return;
+
+    const cw = this.canvas.clientWidth;
+
+    const ch = this.canvas.clientHeight;
+
+    const vw = this.video.videoWidth;
+
+    const vh = this.video.videoHeight;
+
+    const fit =
+      window.innerWidth <= this.config.mobileBreakpoint
+        ? this.config.mobileFit
+        : this.config.desktopFit;
+
+    const videoRatio = vw / vh;
+
+    const canvasRatio = cw / ch;
+
+    let dw;
+
+    let dh;
+
+    if (fit === "cover" ? canvasRatio > videoRatio : canvasRatio < videoRatio) {
+      dw = cw;
+
+      dh = dw / videoRatio;
+    } else {
+      dh = ch;
+
+      dw = dh * videoRatio;
+    }
+
+    const dx = (cw - dw) * 0.5;
+
+    const dy = (ch - dh) * 0.5;
 
     this.ctx.clearRect(
+      0,
 
-        0,
+      0,
 
-        0,
+      cw,
 
-        width,
-
-        height
-
-    );
-
-    this.ctx.fillStyle=this.config.backgroundColor;
-
-    this.ctx.fillRect(
-
-        0,
-
-        0,
-
-        width,
-
-        height
-
+      ch,
     );
 
     this.ctx.drawImage(
+      this.video,
 
-        this.video,
+      dx,
 
-        rect.x,
+      dy,
 
-        rect.y,
+      dw,
 
-        rect.width,
-
-        rect.height
-
+      dh,
     );
-
-    this.markReady();
-
-},
-
-/*=========================================
-    DRAW RECT
-=========================================*/
-
-getDrawRect(
-
-    sourceWidth,
-
-    sourceHeight,
-
-    canvasWidth,
-
-    canvasHeight,
-
-    fit
-
-){
-
-    const imageRatio=
-
-        sourceWidth/sourceHeight;
-
-    const canvasRatio=
-
-        canvasWidth/canvasHeight;
-
-    let width;
-
-    let height;
-
-    if(
-
-        fit==="cover"
-
-            ?canvasRatio>imageRatio
-
-            :canvasRatio<imageRatio
-
-    ){
-
-        width=canvasWidth;
-
-        height=width/imageRatio;
-
-    }
-
-    else{
-
-        height=canvasHeight;
-
-        width=height*imageRatio;
-
-    }
-
-    return{
-
-        x:(canvasWidth-width)/2,
-
-        y:(canvasHeight-height)/2,
-
-        width,
-
-        height
-
-    };
-
-},
-
-/*=========================================
-    MOBILE
-=========================================*/
-
-isMobile(){
-
-    return window.innerWidth<=this.config.mobileBreakpoint;
-
-},
-
-/*=========================================
-    READY
-=========================================*/
-
-markReady(){
-
-    if(this.ready) return;
-
-    this.ready=true;
-
-    this.hero.classList.remove("is-loading");
-
-    this.hero.classList.add("is-ready");
-
-},
-
-/*=========================================
-    START SCROLL
+  },
+  /*=========================================
+    REPLACE startScroll()
 =========================================*/
 
 startScroll(){
 
-    if(!window.gsap){
+    gsap.registerPlugin(
 
-        console.error("GSAP not found.");
+        ScrollTrigger
 
-        return;
+    );
 
-    }
+    if(this.tween){
 
-    if(!window.ScrollTrigger){
-
-        console.error("ScrollTrigger not found.");
-
-        return;
+        this.tween.kill();
 
     }
-
-    this.killScroll();
 
     const playhead={
 
@@ -571,7 +309,27 @@ startScroll(){
 
     };
 
-    this.scrollTween=gsap.to(
+    const renderFrame=()=>{
+
+        if("requestVideoFrameCallback" in this.video){
+
+            this.video.requestVideoFrameCallback(()=>{
+
+                this.render();
+
+            });
+
+        }
+
+        else{
+
+            this.requestRender();
+
+        }
+
+    };
+
+    this.tween=gsap.to(
 
         playhead,
 
@@ -581,31 +339,45 @@ startScroll(){
 
             ease:"none",
 
+            duration:1,
+
             onUpdate:()=>{
 
-                this.seek(playhead.time);
+                if(
+
+                    Math.abs(
+
+                        this.video.currentTime-playhead.time
+
+                    )>0.001
+
+                ){
+
+                    this.video.currentTime=
+
+                        playhead.time;
+
+                }
+
+                renderFrame();
 
             },
 
             scrollTrigger:{
 
-                trigger:this.isMobile()
+                trigger:
 
-                    ?this.media
+                    window.innerWidth<=this.config.mobileBreakpoint
 
-                    :this.hero,
+                        ?this.media
+
+                        :this.hero,
 
                 start:"top top",
 
                 end:"+="+this.config.scrollLength,
 
-                pin:this.config.pin,
-
-                pinSpacing:this.isMobile()
-
-                    ?this.config.mobilePinSpacing
-
-                    :this.config.pinSpacing,
+                pin:true,
 
                 scrub:this.config.scrub,
 
@@ -613,13 +385,17 @@ startScroll(){
 
                 invalidateOnRefresh:true,
 
+                fastScrollEnd:true,
+
                 onUpdate:(self)=>{
 
-                    this.updateProgress(
+                    if(this.progress){
 
-                        self.progress
+                        this.progress.style.transform=
 
-                    );
+                            `scaleX(${self.progress})`;
+
+                    }
 
                 }
 
@@ -629,189 +405,39 @@ startScroll(){
 
     );
 
-    this.scrollTrigger=
-
-        this.scrollTween.scrollTrigger;
-
 },
 
 /*=========================================
-    SEEK
+    ADD THIS FUNCTION
 =========================================*/
 
-seek(time){
+renderLoop(){
 
-    if(!this.videoReady) return;
+    if(this.destroyed) return;
 
-    if(time===this.currentTime) return;
+    this.render();
 
-    this.currentTime=time;
+    requestAnimationFrame(
 
-    this.video.currentTime=time;
-
-},
-
-/*=========================================
-    REFRESH
-=========================================*/
-
-refresh(){
-
-    this.resize();
-
-    if(window.ScrollTrigger){
-
-        ScrollTrigger.refresh();
-
-    }
-
-},
-
-/*=========================================
-    KILL SCROLL
-=========================================*/
-
-killScroll(){
-
-    if(this.scrollTween){
-
-        this.scrollTween.kill();
-
-        this.scrollTween=null;
-
-    }
-
-    if(this.scrollTrigger){
-
-        this.scrollTrigger.kill();
-
-        this.scrollTrigger=null;
-
-    }
-
-},
-
-/*=========================================
-    UPDATE PROGRESS
-=========================================*/
-
-updateProgress(progress){
-
-    if(!this.progress) return;
-
-    progress=Math.max(
-
-        0,
-
-        Math.min(
-
-            1,
-
-            progress
-
-        )
+        ()=>this.renderLoop()
 
     );
 
-    this.progress.style.transform=
-
-        `scaleX(${progress})`;
-
 },
 
-/*=========================================
-    DESTROY
-=========================================*/
-
-destroy(){
-
-    this.killScroll();
-
-    this.disconnectResizeObserver();
-
-    if(this.renderRAF){
-
-        cancelAnimationFrame(
-
-            this.renderRAF
-
-        );
-
+  destroy() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
     }
 
-    if(this.waitTimer){
-
-        clearTimeout(
-
-            this.waitTimer
-
-        );
-
+    if (this.tween) {
+      this.tween.kill();
     }
 
-    if(this.video){
-
-        this.video.pause();
-
-        this.video.removeAttribute(
-
-            "src"
-
-        );
-
-        this.video.load();
-
-        this.video.remove();
-
-    }
-
-    this.video=null;
-
-    this.canvas=null;
-
-    this.ctx=null;
-
-    this.hero=null;
-
-    this.media=null;
-
-    this.overlay=null;
-
-    this.content=null;
-
-    this.footer=null;
-
-    this.progress=null;
-
-    this.videoReady=false;
-
-    this.ready=false;
-
-    this.initialized=false;
-
-    this.currentTime=0;
-
-},
-
-
-    /*=========================================
-        DEBUG
-    =========================================*/
-
-    log(...args){
-
-        if(!this.config.debug) return;
-
-        console.log("[MotionEngine]",...args);
-
-    },
-
-/*=========================================
-    END OF OBJECT
-=========================================*/
-
+    ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+  },
 };
 
-window.MotionEngine=MotionEngine;
+window.MotionEngine = MotionEngine;
 
 MotionEngine.init();
