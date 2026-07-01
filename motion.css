@@ -1,0 +1,916 @@
+/* ==========================================================
+   TYPOGRAPHY
+========================================================== */
+
+.eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:18px;
+
+    font-size:.8rem;
+    font-weight:600;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+
+    color:#7fdcff;
+}
+
+.eyebrow::before{
+
+    content:"";
+
+    width:42px;
+    height:1px;
+
+    background:currentColor;
+
+    opacity:.8;
+
+}
+
+.motion-caption h1,
+.motion-content h1{
+
+    margin:0;
+
+    font-size:clamp(3rem,6vw,6rem);
+
+    line-height:.95;
+
+    font-weight:500;
+
+    letter-spacing:-.04em;
+
+    color:#fff;
+
+    text-wrap:balance;
+
+}
+
+.motion-caption p,
+.motion-content p{
+
+    margin-top:28px;
+
+    max-width:620px;
+
+    font-size:clamp(1rem,1.2vw,1.15rem);
+
+    line-height:1.8;
+
+    color:rgba(255,255,255,.78);
+
+}
+
+.motion-content h1{
+
+    color:#fff;
+
+}
+
+.motion-content p{
+
+    color:rgba(255,255,255,.72);
+
+}
+
+
+/* ==========================================================
+   BUTTON GROUP
+========================================================== */
+
+.motion-buttons{
+
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:18px;
+
+    margin-top:38px;
+
+}
+
+.motion-buttons a{
+
+    text-decoration:none;
+
+}
+
+.btn-primary{
+
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+
+    min-width:180px;
+
+    height:58px;
+
+    padding-inline:34px;
+
+    border-radius:999px;
+
+    background:#ffffff;
+
+    color:#000;
+
+    font-size:.95rem;
+    font-weight:600;
+
+    transition:
+        background .35s ease,
+        color .35s ease,
+        transform .35s ease;
+
+}
+
+.btn-primary:hover{
+
+    transform:translateY(-3px);
+
+    background:#8ee8ff;
+
+}
+
+.btn-secondary{
+
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+
+    min-width:180px;
+
+    height:58px;
+
+    padding-inline:34px;
+
+    border-radius:999px;
+
+    border:1px solid rgba(255,255,255,.25);
+
+    background:rgba(255,255,255,.05);
+
+    backdrop-filter:blur(12px);
+
+    color:#fff;
+
+    font-size:.95rem;
+    font-weight:600;
+
+    transition:
+        background .35s ease,
+        border-color .35s ease,
+        transform .35s ease;
+
+}
+
+.btn-secondary:hover{
+
+    transform:translateY(-3px);
+
+    border-color:#8ee8ff;
+
+    background:rgba(255,255,255,.12);
+
+}
+
+
+/* ==========================================================
+   PROGRESS BAR
+========================================================== */
+
+.motion-progress{
+
+    position:relative;
+
+    width:100%;
+
+    height:2px;
+
+    overflow:hidden;
+
+    border-radius:999px;
+
+    background:rgba(255,255,255,.18);
+
+}
+
+.motion-progress span{
+
+    position:absolute;
+
+    inset:0 auto 0 0;
+
+    width:0%;
+
+    background:#8ee8ff;
+
+    will-change:width;
+
+}
+
+
+/* ==========================================================
+   SCROLL INDICATOR
+========================================================== */
+
+.motion-scroll{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:12px;
+
+    margin-top:18px;
+
+    font-size:.8rem;
+
+    font-weight:600;
+
+    letter-spacing:.18em;
+
+    text-transform:uppercase;
+
+    color:rgba(255,255,255,.72);
+
+}
+
+.motion-scroll::before{
+
+    content:"";
+
+    width:34px;
+
+    height:1px;
+
+    background:currentColor;
+
+    opacity:.7;
+
+}
+
+.motion-scroll.is-hidden{
+
+    opacity:0;
+
+    pointer-events:none;
+
+}
+
+
+/* ==========================================================
+   DESKTOP OVERLAY
+========================================================== */
+
+.motion-overlay{
+
+    justify-content:flex-end;
+
+}
+
+.motion-caption{
+
+    display:flex;
+
+    flex-direction:column;
+
+    align-items:flex-start;
+
+    max-width:720px;
+
+    margin-bottom:48px;
+
+    z-index:5;
+
+}/* ==========================================================
+   DESKTOP LAYOUT
+========================================================== */
+
+@media (min-width:769px){
+
+    .motion-hero{
+
+        display:flex;
+        align-items:stretch;
+        justify-content:center;
+
+    }
+
+    .motion-media{
+        position:relative;
+        display:grid;
+        width:100%;
+        height:100%;
+        overflow:hidden;
+        z-index:1;
+
+    }
+
+    .motion-overlay{
+
+    grid-area:1 / 1;
+
+    display:flex;
+
+    align-items:flex-end;
+
+    justify-content:flex-start;
+
+    padding:
+        clamp(48px,5vw,80px)
+        clamp(48px,6vw,120px);
+
+    z-index:5;
+
+    pointer-events:none;
+
+    }
+
+    .motion-caption{
+
+        pointer-events:auto;
+
+    }
+
+    .motion-content{
+
+        display:none;
+
+    }
+
+    .motion-footer{
+
+        position:absolute;
+
+        left:0;
+        right:0;
+        bottom:36px;
+
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+
+        gap:32px;
+
+        padding-inline:
+            clamp(48px,6vw,120px);
+
+        z-index:10;
+
+    }
+
+    .motion-progress{
+
+        flex:1;
+
+        max-width:420px;
+
+    }
+
+}
+
+
+/* ==========================================================
+   TABLET
+========================================================== */
+
+@media (max-width:1024px){
+
+    .motion-overlay{
+
+        padding:
+            48px
+            48px;
+
+    }
+
+    .motion-caption{
+
+        max-width:560px;
+
+    }
+
+    .motion-caption h1{
+
+        font-size:clamp(3rem,7vw,4.8rem);
+
+    }
+
+    .motion-caption p{
+
+        max-width:520px;
+
+    }
+
+}
+
+
+/* ==========================================================
+   MOBILE LAYOUT
+========================================================== */
+
+@media (max-width:768px){
+
+    .motion-hero{
+
+        display:flex;
+
+        flex-direction:column;
+
+        min-height:auto;
+
+        background:#000;
+
+    }
+
+    .motion-media{
+
+        position:relative;
+
+        width:100%;
+
+        aspect-ratio:16/9;
+
+        overflow:hidden;
+
+        background:#000;
+
+    }
+
+    #heroCanvas{
+
+    grid-area:1 / 1;
+    width:100%;
+    height:100%;
+    display:block;
+
+    }
+
+    .motion-overlay{
+
+        display:none;
+
+    }
+
+    .motion-content{
+
+        display:flex;
+
+        flex-direction:column;
+
+        gap:18px;
+
+        padding:
+
+            48px
+            28px
+            32px;
+
+        background:#000;
+
+    }
+
+    .motion-content h1{
+
+        font-size:clamp(2.3rem,10vw,3.4rem);
+
+        line-height:1;
+
+    }
+
+    .motion-content p{
+
+        margin:0;
+
+        max-width:none;
+
+        font-size:1rem;
+
+        line-height:1.75;
+
+    }
+
+    .motion-buttons{
+
+        margin-top:14px;
+
+        flex-direction:column;
+
+        align-items:stretch;
+
+    }
+
+    .motion-buttons a{
+
+        width:100%;
+
+    }
+
+    .btn-primary,
+    .btn-secondary{
+
+        width:100%;
+
+    }
+
+    .motion-footer{
+
+        position:relative;
+
+        display:flex;
+
+        flex-direction:column;
+
+        align-items:flex-start;
+
+        gap:18px;
+
+        padding:
+
+            0
+            28px
+            42px;
+
+        background:#000;
+
+    }
+
+    .motion-progress{
+
+        width:100%;
+
+    }
+
+    .motion-scroll{
+
+        margin-top:0;
+
+    }
+
+}
+
+
+/* ==========================================================
+   SMALL MOBILE
+========================================================== */
+
+@media (max-width:480px){
+
+    .motion-content{
+
+        padding:
+
+            36px
+            22px
+            28px;
+
+    }
+
+    .motion-footer{
+
+        padding:
+
+            0
+            22px
+            32px;
+
+    }
+
+}
+
+
+/* ==========================================================
+   LANDSCAPE MOBILE
+========================================================== */
+
+@media (max-height:540px) and (orientation:landscape){
+
+    .motion-media{
+
+        aspect-ratio:auto;
+
+        height:100vh;
+
+    }
+
+}
+
+/* ==========================================================
+   LOADING STATE
+========================================================== */
+
+.motion-hero.is-loading{
+
+    pointer-events:none;
+
+}
+
+.motion-hero.is-loading .motion-content,
+.motion-hero.is-loading .motion-footer,
+.motion-hero.is-loading .motion-overlay{
+
+    opacity:0;
+
+}
+
+.motion-hero.is-ready .motion-content,
+.motion-hero.is-ready .motion-footer,
+.motion-hero.is-ready .motion-overlay{
+
+    opacity:1;
+
+    transition:
+        opacity .7s ease,
+        transform .8s cubic-bezier(.22,.61,.36,1);
+
+}
+
+
+/* ==========================================================
+   CANVAS
+========================================================== */
+
+#heroCanvas{
+
+    opacity:0;
+
+    transition:
+        opacity .8s ease;
+
+    will-change:transform,opacity;
+
+}
+
+.motion-hero.is-ready #heroCanvas{
+
+    opacity:1;
+
+}
+
+.motion-media{
+
+    isolation:isolate;
+
+}
+
+.motion-media::after{
+
+    content:"";
+
+    position:absolute;
+
+    inset:0;
+
+    background:
+
+        linear-gradient(
+            to bottom,
+            rgba(0,0,0,.10),
+            rgba(0,0,0,.28),
+            rgba(0,0,0,.55)
+        );
+
+    pointer-events:none;
+
+}
+
+
+/* ==========================================================
+   HERO ENTRANCE
+========================================================== */
+
+.motion-overlay .eyebrow,
+.motion-content .eyebrow{
+
+    opacity:0;
+
+    transform:translateY(18px);
+
+}
+
+.motion-overlay h1,
+.motion-content h1{
+
+    opacity:0;
+
+    transform:translateY(24px);
+
+}
+
+.motion-overlay p,
+.motion-content p{
+
+    opacity:0;
+
+    transform:translateY(28px);
+
+}
+
+.motion-buttons{
+
+    opacity:0;
+
+    transform:translateY(32px);
+
+}
+
+.motion-footer{
+
+    opacity:0;
+
+    transform:translateY(24px);
+
+}
+
+
+/* ==========================================================
+   READY STATE
+========================================================== */
+
+.motion-hero.is-ready .eyebrow{
+
+    opacity:1;
+
+    transform:none;
+
+    transition:
+        opacity .5s ease,
+        transform .7s cubic-bezier(.22,.61,.36,1);
+
+}
+
+.motion-hero.is-ready h1{
+
+    opacity:1;
+
+    transform:none;
+
+    transition:
+        opacity .65s ease .08s,
+        transform .8s cubic-bezier(.22,.61,.36,1) .08s;
+
+}
+
+.motion-hero.is-ready p{
+
+    opacity:1;
+
+    transform:none;
+
+    transition:
+        opacity .65s ease .16s,
+        transform .8s cubic-bezier(.22,.61,.36,1) .16s;
+
+}
+
+.motion-hero.is-ready .motion-buttons{
+
+    opacity:1;
+
+    transform:none;
+
+    transition:
+        opacity .65s ease .24s,
+        transform .8s cubic-bezier(.22,.61,.36,1) .24s;
+
+}
+
+.motion-hero.is-ready .motion-footer{
+
+    opacity:1;
+
+    transform:none;
+
+    transition:
+        opacity .65s ease .32s,
+        transform .8s cubic-bezier(.22,.61,.36,1) .32s;
+
+}
+
+
+/* ==========================================================
+   SCROLL STATES
+========================================================== */
+
+.motion-hero.is-scrolling .motion-scroll{
+
+    opacity:0;
+
+    transform:translateY(-8px);
+
+    transition:
+        opacity .35s ease,
+        transform .35s ease;
+
+}
+
+.motion-hero.is-finished .motion-progress span{
+
+    width:100% !important;
+
+}
+
+
+/* ==========================================================
+   UTILITIES
+========================================================== */
+
+.hidden{
+
+    display:none !important;
+
+}
+
+.invisible{
+
+    visibility:hidden !important;
+
+}
+
+.no-pointer{
+
+    pointer-events:none !important;
+
+}
+
+.text-center{
+
+    text-align:center;
+
+}
+
+.w-100{
+
+    width:100%;
+
+}
+
+
+/* ==========================================================
+   ACCESSIBILITY
+========================================================== */
+
+:focus-visible{
+
+    outline:2px solid #8ee8ff;
+
+    outline-offset:4px;
+
+}
+
+@media (prefers-reduced-motion:reduce){
+
+    *,
+    *::before,
+    *::after{
+
+        animation:none !important;
+
+        transition:none !important;
+
+        scroll-behavior:auto !important;
+
+    }
+
+    #heroCanvas{
+
+        transition:none;
+
+    }
+
+}
+
+
+/* ==========================================================
+   PERFORMANCE
+========================================================== */
+
+.motion-media,
+.motion-overlay,
+.motion-content,
+.motion-footer,
+#heroCanvas{
+
+    will-change:transform;
+
+}
+
+.motion-caption,
+.motion-content{
+
+    contain:layout style;
+
+}
+
+.motion-media{
+
+    contain:layout paint;
+
+}
+
+
+/* ==========================================================
+   END OF MOTION HERO CSS
+========================================================== */
