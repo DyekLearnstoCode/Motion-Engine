@@ -9,7 +9,7 @@ const MotionEngine = {
     =========================================*/
 
   config: {
-    heroSelector: ".hero-scrub",
+    heroSelector: ".motion-hero",
     canvasID: "heroCanvas",
     frameCount: 241,
     imagePath: "https://dyeklearnstocode.github.io/Motion-Engine/frames/frame_",
@@ -685,20 +685,47 @@ const MotionEngine = {
   },
 
   drawFrame(index, image = this.images[index]) {
-    if (!image || !this.ctx) return;
 
-    const size = this.getCanvasSize();
-    const rect = this.getDrawRect(
-      image,
-      size.width,
-      size.height,
-      this.config.desktopFit,
-    );
+  if (!image || !this.ctx) return;
 
-    this.ctx.fillStyle = this.config.backgroundColor;
-    this.ctx.fillRect(0, 0, size.width, size.height);
-    this.ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
-  },
+  const canvasWidth = this.canvas.clientWidth;
+  const canvasHeight = this.canvas.clientHeight;
+
+  const imageRatio = image.width / image.height;
+  const canvasRatio = canvasWidth / canvasHeight;
+
+  let drawWidth;
+  let drawHeight;
+
+  if (canvasRatio > imageRatio) {
+
+    drawWidth = canvasWidth;
+    drawHeight = drawWidth / imageRatio;
+
+  } else {
+
+    drawHeight = canvasHeight;
+    drawWidth = drawHeight * imageRatio;
+
+  }
+
+  const drawX = (canvasWidth - drawWidth) * 0.5;
+  const drawY = (canvasHeight - drawHeight) * 0.5;
+
+  this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  this.ctx.fillStyle = this.config.backgroundColor;
+  this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  this.ctx.drawImage(
+    image,
+    drawX,
+    drawY,
+    drawWidth,
+    drawHeight
+  );
+
+},
 
   getDrawRect(image, canvasWidth, canvasHeight, fit = "cover") {
     const imageRatio = image.width / image.height;
