@@ -15,7 +15,7 @@ const MotionEngine = {
 
         canvasID:"heroCanvas",
 
-        videoPath:"https://assets.cdn.filesafe.space/GBlruzOVVBQeWEdZHugp/media/6a43d8cfc597b88b6129bcdf.mp4",
+        videoPath: "https://dyeklearnstocode.github.io/Motion-Engine/videos/frame.mp4",
 
         scrollLength:14000,
 
