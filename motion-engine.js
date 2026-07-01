@@ -17,6 +17,8 @@ const MotionEngine = {
     scrollLength: 14000,
     scrub: 0.35,
     pin: true,
+    pinSpacing: true,
+    mobilePinSpacing: false,
     preloadFirst: 20,
     loader: true,
     debug: false,
@@ -74,6 +76,8 @@ const MotionEngine = {
   createdCanvas: false,
   ready: false,
   layoutMode: "",
+  scrollMode: "",
+  lastProgress: -1,
   originalStyles: new Map(),
 
   /*=========================================
@@ -180,9 +184,9 @@ const MotionEngine = {
 
     this.observeResize();
 
-    this.resize();
-
     this.loadImages();
+
+    this.resize();
   },
 
   applyBaseLayout() {
@@ -307,6 +311,11 @@ const MotionEngine = {
       this.scheduleRender(this.currentFrame);
     }
 
+    if (this.scrollTween && layoutChanged) {
+      this.startScroll();
+      return;
+    }
+
     this.refreshScrollTrigger();
   },
 
@@ -356,15 +365,7 @@ const MotionEngine = {
       this.renderRAF = null;
     }
 
-    if (this.scrollTween) {
-      this.scrollTween.kill();
-      this.scrollTween = null;
-    }
-
-    if (this.scrollTrigger) {
-      this.scrollTrigger.kill();
-      this.scrollTrigger = null;
-    }
+    this.killScroll();
 
     this.disconnectResizeObserver();
 
@@ -404,6 +405,8 @@ const MotionEngine = {
     this.createdCanvas = false;
     this.ready = false;
     this.layoutMode = "";
+    this.scrollMode = "";
+    this.lastProgress = -1;
   },
 
   /*=========================================
@@ -861,39 +864,97 @@ const MotionEngine = {
       return;
     }
 
-    if (this.scrollTween) {
-      this.scrollTween.kill();
-      this.scrollTween = null;
-    }
+    this.killScroll();
 
+    const scrollMode = this.getLayoutMode();
+    const maxFrame = this.config.frameCount - 1;
     const playhead = {
       frame: 0,
     };
 
     this.scrollTween = window.gsap.to(playhead, {
-      frame: this.config.frameCount - 1,
+      frame: maxFrame,
       ease: "none",
       onUpdate: () => {
         this.renderFrame(playhead.frame);
+        this.updateProgress(maxFrame > 0 ? playhead.frame / maxFrame : 1);
       },
       scrollTrigger: {
         trigger: this.hero,
         start: "top top",
         end: `+=${this.config.scrollLength}`,
-        pin: this.config.pin,
-        pinSpacing: false,
+        pin: this.getPinTarget(scrollMode),
+        pinSpacing: this.getPinSpacing(scrollMode),
         scrub: this.config.scrub,
         anticipatePin: 1,
         fastScrollEnd: true,
         invalidateOnRefresh: true,
         onRefresh: (self) => {
           this.scrollTrigger = self;
+          this.updateProgress(self.progress);
         },
       },
     });
 
+    this.scrollMode = scrollMode;
     this.scrollTrigger = this.scrollTween.scrollTrigger || this.scrollTrigger;
+    this.updateProgress(this.scrollTrigger ? this.scrollTrigger.progress : 0);
     this.refreshScrollTrigger(true);
+  },
+
+  killScroll() {
+    const tweenTrigger = this.scrollTween && this.scrollTween.scrollTrigger;
+
+    if (tweenTrigger) {
+      tweenTrigger.kill();
+    }
+
+    if (this.scrollTween) {
+      this.scrollTween.kill();
+      this.scrollTween = null;
+    }
+
+    if (this.scrollTrigger && this.scrollTrigger !== tweenTrigger) {
+      this.scrollTrigger.kill();
+    }
+
+    this.scrollTrigger = null;
+  },
+
+  getPinTarget(scrollMode = this.getLayoutMode()) {
+    if (!this.config.pin) return false;
+
+    return scrollMode === "mobile" ? this.media : this.hero;
+  },
+
+  getPinSpacing(scrollMode = this.getLayoutMode()) {
+    if (scrollMode === "mobile") {
+      return this.config.mobilePinSpacing;
+    }
+
+    return this.config.pinSpacing;
+  },
+
+  updateProgress(progress = 0) {
+    const safeProgress = Number.isFinite(progress) ? progress : 0;
+    const clamped = Math.max(0, Math.min(1, safeProgress));
+
+    if (Math.abs(clamped - this.lastProgress) < 0.0005) return;
+
+    this.lastProgress = clamped;
+
+    if (this.progress) {
+      this.captureOriginalStyle(this.progress);
+      this.progress.style.width = `${(clamped * 100).toFixed(3)}%`;
+    }
+
+    if (!this.hero) return;
+
+    this.hero.classList.toggle(
+      "is-scrolling",
+      clamped > 0.001 && clamped < 0.999,
+    );
+    this.hero.classList.toggle("is-finished", clamped >= 0.999);
   },
 };
 
