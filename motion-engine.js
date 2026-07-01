@@ -22,6 +22,8 @@ const MotionEngine = {
     debug: false,
     backgroundColor: "#000",
     desktopFit: "cover",
+    mobileFit: "contain",
+    mobileBreakpoint: 768,
     loadConcurrency: 4,
     maxCachedFrames: 96,
     lookAheadFrames: 18,
@@ -36,6 +38,11 @@ const MotionEngine = {
 
   hero: null,
   heroInner: null,
+  media: null,
+  overlay: null,
+  content: null,
+  footer: null,
+  progress: null,
   canvas: null,
   canvasWrap: null,
   ctx: null,
@@ -64,6 +71,10 @@ const MotionEngine = {
   scrollStarted: false,
   progressiveIndex: 0,
   progressiveHandle: null,
+  createdCanvas: false,
+  ready: false,
+  layoutMode: "",
+  originalStyles: new Map(),
 
   /*=========================================
       INITIALIZE
@@ -111,6 +122,13 @@ const MotionEngine = {
     }
 
     this.initialized = true;
+    this.ready = false;
+
+    if (this.config.loader) {
+      this.hero.classList.add("is-loading");
+    }
+
+    this.hero.classList.remove("is-ready", "is-scrolling", "is-finished");
 
     this.log("Motion Hero Found");
 
@@ -137,11 +155,16 @@ const MotionEngine = {
     =========================================*/
 
   createCanvas() {
-    let canvas = document.getElementById(this.config.canvasID);
+    let canvas =
+      this.media.querySelector(`#${this.config.canvasID}`) ||
+      document.getElementById(this.config.canvasID);
 
     if (!canvas) {
       canvas = document.createElement("canvas");
       canvas.id = this.config.canvasID;
+      this.media.prepend(canvas);
+      this.createdCanvas = true;
+    } else if (canvas.parentElement !== this.media) {
       this.media.prepend(canvas);
     }
 
@@ -163,24 +186,62 @@ const MotionEngine = {
   },
 
   applyBaseLayout() {
-    Object.assign(this.hero.style, {
+    const isMobile = this.isMobile();
+
+    this.applyStyles(this.hero, {
       position: "relative",
-      overflow: "hidden",
+      overflow: isMobile ? "visible" : "hidden",
+      height: isMobile ? "auto" : "100vh",
+      minHeight: isMobile ? "0" : "100vh",
     });
 
-    Object.assign(this.media.style, {
-      position: window.innerWidth <= 768 ? "relative" : "absolute",
-      inset: window.innerWidth <= 768 ? "" : "0",
+    this.applyStyles(this.media, {
+      position: isMobile ? "relative" : "absolute",
+      inset: isMobile ? "" : "0",
+      display: "grid",
       width: "100%",
+      height: isMobile ? "auto" : "100%",
+      aspectRatio: isMobile ? "16 / 9" : "",
       overflow: "hidden",
-      zIndex: "0",
+      zIndex: "1",
     });
 
-    Object.assign(this.canvas.style, {
+    this.applyStyles(this.canvas, {
       display: "block",
+      gridArea: "1 / 1",
       width: "100%",
       height: "100%",
+      position: "relative",
+      zIndex: "1",
     });
+  },
+
+  applyStyles(element, styles) {
+    if (!element) return;
+
+    this.captureOriginalStyle(element);
+    Object.assign(element.style, styles);
+  },
+
+  captureOriginalStyle(element) {
+    if (!element || this.originalStyles.has(element)) return;
+
+    this.originalStyles.set(element, element.getAttribute("style"));
+  },
+
+  restoreOriginalStyles() {
+    this.originalStyles.forEach((style, element) => {
+      if (!element) return;
+
+      if (style === null) {
+        element.removeAttribute("style");
+        return;
+      }
+
+      element.setAttribute("style", style);
+    });
+
+    this.originalStyles.clear();
   },
 
   observeResize() {
@@ -216,6 +277,10 @@ const MotionEngine = {
   resize() {
     if (!this.canvas || !this.ctx) return;
 
+    const nextLayoutMode = this.getLayoutMode();
+    const layoutChanged = this.layoutMode !== nextLayoutMode;
+    this.layoutMode = nextLayoutMode;
+
     this.applyBaseLayout();
 
     const dpr = window.devicePixelRatio || 1;
@@ -237,7 +302,7 @@ const MotionEngine = {
 
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    if (changed) {
+    if (changed || layoutChanged) {
       this.renderDirty = true;
       this.scheduleRender(this.currentFrame);
     }
@@ -247,11 +312,19 @@ const MotionEngine = {
 
   getCanvasSize() {
     const rect = this.media.getBoundingClientRect();
+    let width = Math.max(1, Math.round(rect.width));
+    let height = Math.max(1, Math.round(rect.height));
+
+    if (height <= 1) {
+      height = this.isMobile()
+        ? Math.max(1, Math.round(width * 0.5625))
+        : Math.max(1, Math.round(window.innerHeight || width * 0.5625));
+    }
 
     return {
-      width: Math.max(1, Math.round(rect.width)),
+      width,
 
-      height: Math.max(1, Math.round(rect.height)),
+      height,
     };
   },
 
@@ -295,12 +368,28 @@ const MotionEngine = {
 
     this.disconnectResizeObserver();
 
-    if (this.canvasWrap) {
-      this.canvasWrap.remove();
+    if (this.createdCanvas && this.canvas && this.canvas.parentNode) {
+      this.canvas.parentNode.removeChild(this.canvas);
     }
+
+    if (this.hero) {
+      this.hero.classList.remove(
+        "is-loading",
+        "is-ready",
+        "is-scrolling",
+        "is-finished",
+      );
+    }
+
+    this.restoreOriginalStyles();
 
     this.hero = null;
     this.heroInner = null;
+    this.media = null;
+    this.overlay = null;
+    this.content = null;
+    this.footer = null;
+    this.progress = null;
     this.canvas = null;
     this.canvasWrap = null;
     this.ctx = null;
@@ -312,6 +401,9 @@ const MotionEngine = {
     this.initialized = false;
     this.renderDirty = true;
     this.lastRenderKey = "";
+    this.createdCanvas = false;
+    this.ready = false;
+    this.layoutMode = "";
   },
 
   /*=========================================
@@ -680,52 +772,32 @@ const MotionEngine = {
       frame,
       this.canvas.width,
       this.canvas.height,
-      this.config.desktopFit,
+      this.getCurrentFit(),
+      this.config.backgroundColor,
     ].join(":");
   },
 
   drawFrame(index, image = this.images[index]) {
+    if (!image || !this.ctx) return;
 
-  if (!image || !this.ctx) return;
+    const canvasWidth = this.canvas.clientWidth || this.getCanvasSize().width;
+    const canvasHeight = this.canvas.clientHeight || this.getCanvasSize().height;
+    const rect = this.getDrawRect(
+      image,
+      canvasWidth,
+      canvasHeight,
+      this.getCurrentFit(),
+    );
 
-  const canvasWidth = this.canvas.clientWidth;
-  const canvasHeight = this.canvas.clientHeight;
+    this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-  const imageRatio = image.width / image.height;
-  const canvasRatio = canvasWidth / canvasHeight;
+    this.ctx.fillStyle = this.config.backgroundColor;
+    this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-  let drawWidth;
-  let drawHeight;
+    this.ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
 
-  if (canvasRatio > imageRatio) {
-
-    drawWidth = canvasWidth;
-    drawHeight = drawWidth / imageRatio;
-
-  } else {
-
-    drawHeight = canvasHeight;
-    drawWidth = drawHeight * imageRatio;
-
-  }
-
-  const drawX = (canvasWidth - drawWidth) * 0.5;
-  const drawY = (canvasHeight - drawHeight) * 0.5;
-
-  this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-  this.ctx.fillStyle = this.config.backgroundColor;
-  this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-  this.ctx.drawImage(
-    image,
-    drawX,
-    drawY,
-    drawWidth,
-    drawHeight
-  );
-
-},
+    this.markReady();
+  },
 
   getDrawRect(image, canvasWidth, canvasHeight, fit = "cover") {
     const imageRatio = image.width / image.height;
@@ -751,6 +823,26 @@ const MotionEngine = {
 
   render() {
     this.scheduleRender(this.currentFrame);
+  },
+
+  getLayoutMode() {
+    return this.isMobile() ? "mobile" : "desktop";
+  },
+
+  isMobile() {
+    return window.innerWidth <= this.config.mobileBreakpoint;
+  },
+
+  getCurrentFit() {
+    return this.isMobile() ? this.config.mobileFit : this.config.desktopFit;
+  },
+
+  markReady() {
+    if (this.ready || !this.hero) return;
+
+    this.ready = true;
+    this.hero.classList.remove("is-loading");
+    this.hero.classList.add("is-ready");
   },
 
   clampFrame(index) {
