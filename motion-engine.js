@@ -191,6 +191,7 @@ const MotionEngine = {
 
   applyBaseLayout() {
     const isMobile = this.isMobile();
+    const mobileMediaHeight = isMobile ? `${this.getMobileMediaHeight()}px` : "";
 
     this.applyStyles(this.hero, {
       position: "relative",
@@ -204,7 +205,8 @@ const MotionEngine = {
       inset: isMobile ? "" : "0",
       display: "grid",
       width: "100%",
-      height: isMobile ? "auto" : "100%",
+      height: isMobile ? mobileMediaHeight : "100%",
+      minHeight: isMobile ? mobileMediaHeight : "",
       aspectRatio: isMobile ? "16 / 9" : "",
       overflow: "hidden",
       zIndex: "1",
@@ -321,13 +323,23 @@ const MotionEngine = {
 
   getCanvasSize() {
     const rect = this.media.getBoundingClientRect();
-    let width = Math.max(1, Math.round(rect.width));
-    let height = Math.max(1, Math.round(rect.height));
+    let width = Math.max(0, Math.round(rect.width));
+
+    if (width <= 1 && this.media.parentElement) {
+      const parentRect = this.media.parentElement.getBoundingClientRect();
+      width = Math.max(width, Math.round(parentRect.width));
+    }
+
+    if (width <= 1) {
+      width = Math.max(1, Math.round(window.innerWidth || 1));
+    }
+
+    let height = this.isMobile()
+      ? this.getMobileMediaHeight(width)
+      : Math.max(1, Math.round(rect.height));
 
     if (height <= 1) {
-      height = this.isMobile()
-        ? Math.max(1, Math.round(width * 0.5625))
-        : Math.max(1, Math.round(window.innerHeight || width * 0.5625));
+      height = Math.max(1, Math.round(window.innerHeight || width * 0.5625));
     }
 
     return {
@@ -335,6 +347,22 @@ const MotionEngine = {
 
       height,
     };
+  },
+
+  getMobileMediaHeight(width = 0) {
+    const mediaRect = this.media ? this.media.getBoundingClientRect() : null;
+    const parentRect =
+      this.media && this.media.parentElement
+        ? this.media.parentElement.getBoundingClientRect()
+        : null;
+    const measuredWidth =
+      width ||
+      (mediaRect && mediaRect.width) ||
+      (parentRect && parentRect.width) ||
+      window.innerWidth ||
+      1;
+
+    return Math.max(1, Math.round(measuredWidth * 0.5625));
   },
 
   refresh() {
